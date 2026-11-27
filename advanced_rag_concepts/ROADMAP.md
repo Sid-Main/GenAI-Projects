@@ -22,16 +22,34 @@ Hands-on path from RAG fundamentals to production-grade retrieval systems, learn
 |---|---|---|
 | Backend | Python, FastAPI, Pydantic | Free |
 | Frontend | React (Vite) — nominal UI | Free |
-| LLM | Google Gemini API (free tier) | Free |
-| Embeddings | Local BGE via sentence-transformers → Voyage AI (free tier) for comparison | Free |
+| LLM | **Ollama** (local, Docker, CPU) for development + **Google Gemini API** (free tier) for quality/eval — swappable behind `LLMClient` | Free |
+| Embeddings | Local BGE via sentence-transformers, Ollama embedding models (e.g. `nomic-embed-text`) → Voyage AI (free tier) for comparison | Free |
 | Vector store | Postgres + pgvector (Docker) | Free |
 | Keyword search | Postgres full-text search (BM25-style) | Free |
 | Reranker | Local cross-encoder (bge-reranker) → Voyage rerank for comparison | Free |
-| Tracing / observability | Langfuse (self-hosted, Docker) | Free |
-| Infra | Docker Compose | Free |
+| Tracing / observability | Lightweight option chosen in M4 — Arize Phoenix (single container) or Langfuse Cloud free tier | Free |
+| Infra | Docker Compose (Postgres + Ollama) | Free |
+
+### Where each LLM is used
+
+| Job | Provider | Why |
+|---|---|---|
+| Learning Docker & local model serving | Ollama | Hands-on with containers, volumes, model pulls |
+| Day-to-day development (M1–M3) | Ollama, small (~3B) model | Offline, no API key, no rate limits, data stays local |
+| Answer quality & evaluation runs (M4+) | Gemini | Much stronger; CPU inference is too slow for full eval runs |
+| LLM-as-judge | Gemini | Small local models are unreliable judges |
+| Experiment (M4) | Ollama vs Gemini on the same eval set | Measure quality / latency / cost trade-offs |
+
+### Machine constraints (dev box)
+
+- **CPU-only inference:** Intel i5-7500 (4 cores), integrated GPU — Ollama cannot use GPU acceleration. Expect ~5–10 tokens/s on 3B models and long prompt-processing times on RAG-sized prompts.
+- **RAM:** 16 GB total, ~7.7 GB allocated to Docker (raise via `.wslconfig` if needed).
+- **Disk:** Docker data stored on **D:** (more free space than C:).
+- **Windows Application Control** blocks venv `.exe` launchers → always run tools as `uv run python -m <tool>`.
 
 > **Note:** Gemini's free tier may use prompts to improve Google's products — use public documents only.
 > Free-tier limits change often; check provider consoles for current numbers.
+> Self-hosted Langfuse needs ~4 extra containers (Postgres, ClickHouse, Redis, MinIO) — too heavy alongside Ollama on this machine.
 
 ---
 
@@ -85,13 +103,16 @@ Upload a varied collection of PDFs, ask questions in a chat UI, and get streamed
 - [ ] Backend: FastAPI app, `uv`, `ruff`, `mypy`, `pytest`, `pre-commit`
 - [ ] Settings via `pydantic-settings` + `.env.example`
 - [ ] Structured logging, `/health` endpoint
+- [ ] Docker Desktop: move disk image to D:, check memory allocation
 - [ ] Docker Compose: Postgres + pgvector
+- [ ] Docker Compose: Ollama service (pinned version, models in a volume)
+- [ ] Pull a small chat model (~3B) + an embedding model; measure tokens/s on this machine
 - [ ] Alembic initialised, first migration (enable `vector` extension)
 - [ ] Frontend: React (Vite) skeleton calling `/health`
 - [ ] GitHub Actions CI: lint, type check, tests
 - [ ] ADR-001: stack choice
 
-**Done when:** `docker compose up` + backend + frontend run; CI is green; one passing test.
+**Done when:** `docker compose up` (Postgres + Ollama) + backend + frontend run; Ollama answers a prompt; CI is green; one passing test.
 
 ---
 
@@ -102,13 +123,14 @@ Upload a varied collection of PDFs, ask questions in a chat UI, and get streamed
 - [ ] Extract text from 2–3 PDFs (`pypdf` / PyMuPDF)
 - [ ] Naive fixed-size chunking
 - [ ] Embeddings with `all-MiniLM-L6-v2` and `bge-small-en-v1.5`; cosine similarity in numpy
-- [ ] Top-k retrieval → prompt → Gemini → answer
+- [ ] Top-k retrieval → prompt → **Ollama** (local) → answer — no API key needed
 - [ ] **Retrieval comparison experiment** on the same 10 questions:
   - [ ] Bag-of-words / TF-IDF
   - [ ] BM25
   - [ ] Averaged word2vec
   - [ ] MiniLM
   - [ ] BGE
+  - [ ] Ollama embedding model (e.g. `nomic-embed-text`)
 - [ ] Write up findings in `experiments/m1_findings.md` (why word2vec fails, where BM25 still wins)
 
 **Learn:** embeddings, similarity, sparse vs dense retrieval, the minimal RAG loop.
@@ -128,7 +150,7 @@ Upload a varied collection of PDFs, ask questions in a chat UI, and get streamed
   - [ ] Fixed-size with overlap
   - [ ] Recursive (paragraph → sentence)
   - [ ] Structure-aware (headings/sections)
-- [ ] `Embedder` interface; local BGE implementation; batched embedding
+- [ ] `Embedder` interface; implementations: local BGE (sentence-transformers) + Ollama; batched embedding
 - [ ] Store vectors in pgvector; HNSW index
 - [ ] `GET /documents`, `GET /documents/{id}`, `DELETE /documents/{id}` (deletes chunks too)
 - [ ] Unit tests for chunkers; integration test for ingestion
@@ -143,7 +165,7 @@ Upload a varied collection of PDFs, ask questions in a chat UI, and get streamed
 
 **Goal:** End-to-end question answering with citations.
 
-- [ ] `LLMClient` interface; Gemini implementation
+- [ ] `LLMClient` interface with **two** implementations: `OllamaClient` and `GeminiClient` (both streaming); provider chosen in config
 - [ ] Retrieval service (vector search, top-k, metadata filters by document)
 - [ ] Prompt templates kept in files, versioned
 - [ ] Grounded answers with **citations** (document + page)
@@ -166,7 +188,9 @@ Upload a varied collection of PDFs, ask questions in a chat UI, and get streamed
 - [ ] Generation metrics: faithfulness, answer relevance (LLM-as-judge; optionally RAGAS)
 - [ ] Eval runner CLI: `uv run eval --config <pipeline-config>` → results saved as JSON + markdown report
 - [ ] Results broken down **by PDF type**
-- [ ] Langfuse tracing on every request (retrieval, prompt, LLM call, latency, tokens)
+- [ ] LLM-as-judge runs on Gemini
+- [ ] **Ollama vs Gemini comparison** on the same eval set: quality, latency, tokens/s → `docs/eval/llm_comparison.md`
+- [ ] Choose tracing tool (Phoenix vs Langfuse Cloud) — ADR; trace every request (retrieval, prompt, LLM call, latency, tokens)
 - [ ] Small eval subset added to CI as a regression gate
 - [ ] **Baseline report** committed to `docs/eval/baseline.md`
 
@@ -236,7 +260,7 @@ Upload a varied collection of PDFs, ask questions in a chat UI, and get streamed
 - [ ] API rate limiting; request timeouts
 - [ ] Background worker upgrade (e.g., arq / Celery) for ingestion
 - [ ] Containerise backend + frontend; full `docker compose up` deployment
-- [ ] Cost & latency dashboard from Langfuse data
+- [ ] Cost & latency dashboard from tracing data
 
 **Learn:** security, isolation, performance, operating a RAG service.
 **Done when:** two users can't see each other's documents, and the full stack runs from one command.
@@ -267,3 +291,4 @@ To be scoped once Projects 1–2 are complete. Candidates: agentic RAG (routing,
 | Date | Milestone | Notes |
 |---|---|---|
 | 2026-11-27 | — | Roadmap created |
+| 2026-11-27 | M0 | Backend scaffolded (uv, ruff, mypy, pytest). Added Ollama (local, CPU) alongside Gemini — hybrid LLM plan; tracing tool decision moved to M4 |
