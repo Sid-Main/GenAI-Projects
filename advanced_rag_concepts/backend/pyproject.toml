@@ -1,12 +1,12 @@
 [project]
 name = "rag-app"
 version = "0.1.0"
-description = "Add your description here"
+description = "PDF Knowledge Assistant — RAG backend (FastAPI + pgvector)"
 readme = "README.md"
 authors = [
     { name = "Siddhant Udgirkar", email = "siddhantu@heaptrace.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.20.1",
     "asyncpg>=0.32.0",
@@ -16,9 +16,6 @@ dependencies = [
     "structlog>=26.1.0",
     "uvicorn[standard]>=0.54.0",
 ]
-
-[project.scripts]
-rag-app = "rag_app:main"
 
 [build-system]
 requires = ["uv_build>=0.12.1,<0.13.0"]
@@ -32,4 +29,47 @@ dev = [
     "pytest>=9.2.0",
     "pytest-asyncio>=1.5.0",
     "ruff>=0.17.6",
+]
+
+# ── Ruff: linter + formatter ─────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle: basic style errors/warnings
+    "F",        # pyflakes: unused imports, undefined names
+    "I",        # isort: import ordering
+    "B",        # bugbear: likely bugs (mutable defaults, etc.)
+    "UP",       # pyupgrade: use modern Python syntax
+    "N",        # pep8-naming
+    "SIM",      # simplify: needlessly complex code
+    "C4",       # comprehensions
+    "ASYNC",    # async pitfalls (blocking calls in async code)
+    "RUF",      # ruff-specific rules
+]
+
+# ── Mypy: static type checking ───────────────────────────
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ── Pytest ───────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+markers = [
+    "integration: needs a running Postgres (docker compose up)",
 ]
