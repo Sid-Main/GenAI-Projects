@@ -1,0 +1,38 @@
+name: advanced-rag                      # Project name: prefixes container/volume names to avoid clashes
+
+services:                               # Each entry below is one container
+  postgres:                             # Service name; also its hostname inside Docker's network
+    image: pgvector/pgvector:pg17       # Postgres 17 with pgvector pre-installed (version pinned)
+    environment:                        # Env vars passed into the container
+      POSTGRES_USER: ${POSTGRES_USER:-rag}                                    # DB user from .env, default "rag"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}  # Required: compose fails if missing
+      POSTGRES_DB: ${POSTGRES_DB:-rag}                                        # Database created on first start
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"   # host:container — reach Postgres on localhost:5433 (5432 is taken)
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Store DB files in a named volume so data survives restarts
+    healthcheck:                        # How Docker decides the service is actually ready
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]  # $$ = expand inside container
+      interval: 5s                      # Check every 5 seconds
+      timeout: 3s                       # A check taking longer than 3s counts as failed
+      retries: 10                       # Mark unhealthy after 10 consecutive failures
+    restart: unless-stopped             # Auto-restart on crash/reboot unless you stopped it yourself
+
+  ollama:                               # Local LLM server
+    image: ollama/ollama:0.40.18        # Pinned Ollama version (its "latest" tag can lag behind releases)
+    environment:
+      OLLAMA_KEEP_ALIVE: 30m            # Keep a loaded model in RAM for 30 min, avoiding slow reloads
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"   # Ollama API at http://localhost:11434
+    volumes:
+      - ollama_models:/root/.ollama     # Downloaded models live here, so they're pulled only once
+    healthcheck:
+      test: ["CMD", "ollama", "list"]   # Healthy if the Ollama server answers a "list models" call
+      interval: 10s                     # Check every 10 seconds
+      timeout: 5s                       # Fail a check after 5 seconds
+      retries: 10                       # Unhealthy after 10 failures
+    restart: unless-stopped             # Same restart policy as Postgres
+
+volumes:                                # Declare the named volumes used above
+  pgdata:                               # Postgres data
+  ollama_models:                        # Ollama model files

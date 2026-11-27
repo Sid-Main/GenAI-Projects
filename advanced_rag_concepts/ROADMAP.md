@@ -35,14 +35,27 @@ Hands-on path from RAG fundamentals to production-grade retrieval systems, learn
 | Job | Provider | Why |
 |---|---|---|
 | Learning Docker & local model serving | Ollama | Hands-on with containers, volumes, model pulls |
-| Day-to-day development (M1–M3) | Ollama, small (~3B) model | Offline, no API key, no rate limits, data stays local |
+| Day-to-day development (M1–M3) | Ollama, `llama3.2:1b` | Offline, no API key, no rate limits, data stays local |
 | Answer quality & evaluation runs (M4+) | Gemini | Much stronger; CPU inference is too slow for full eval runs |
 | LLM-as-judge | Gemini | Small local models are unreliable judges |
 | Experiment (M4) | Ollama vs Gemini on the same eval set | Measure quality / latency / cost trade-offs |
 
 ### Machine constraints (dev box)
 
-- **CPU-only inference:** Intel i5-7500 (4 cores), integrated GPU — Ollama cannot use GPU acceleration. Expect ~5–10 tokens/s on 3B models and long prompt-processing times on RAG-sized prompts.
+- **CPU-only inference:** Intel i5-7500 (4 cores), integrated GPU — Ollama cannot use GPU acceleration.
+- **Measured (2026-11-27, Ollama 0.40.18 in Docker, 36-token prompt):**
+
+  | Metric | `llama3.2:3b` | `llama3.2:1b` |
+  |---|---|---|
+  | Cold load (disk → RAM) | ~28 s | ~8 s |
+  | Prompt processing | ~23 tokens/s | ~27 tokens/s* |
+  | Generation | ~3.3–4.2 tokens/s | ~7 tokens/s |
+  | Answer quality (same prompt) | Accurate RAG definition | Vaguer, partly inaccurate |
+
+  \* A 36-token prompt is too short to measure prompt speed reliably — re-measure with a real ~1,000-token RAG prompt in M1.
+  Loaded models stay in RAM for 30 min (`OLLAMA_KEEP_ALIVE=30m`), so cold load is paid once.
+
+  → Dev model: **`llama3.2:1b`** (~2× faster generation). Keep dev prompts small (top-3 chunks); use Gemini for full-size prompts and eval.
 - **RAM:** 16 GB total, ~7.7 GB allocated to Docker (raise via `.wslconfig` if needed).
 - **Disk:** Docker data stored on **D:** (more free space than C:).
 - **Windows Application Control** blocks venv `.exe` launchers → always run tools as `uv run python -m <tool>`.
@@ -106,7 +119,7 @@ Upload a varied collection of PDFs, ask questions in a chat UI, and get streamed
 - [ ] Docker Desktop: move disk image to D:, check memory allocation
 - [ ] Docker Compose: Postgres + pgvector
 - [ ] Docker Compose: Ollama service (pinned version, models in a volume)
-- [ ] Pull a small chat model (~3B) + an embedding model; measure tokens/s on this machine
+- [ ] Pull a small chat model (`llama3.2:1b`) + an embedding model (`nomic-embed-text`); measure tokens/s on this machine
 - [ ] Alembic initialised, first migration (enable `vector` extension)
 - [ ] Frontend: React (Vite) skeleton calling `/health`
 - [ ] GitHub Actions CI: lint, type check, tests
